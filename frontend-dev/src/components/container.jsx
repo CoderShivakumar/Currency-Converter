@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+
 export const Currency = () => {
   const [from, setFrom] = useState("INR");
   const [to, setTo] = useState("PKR");
@@ -6,6 +7,8 @@ export const Currency = () => {
   const [converted, setConverted] = useState("");
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [rates, setRates] = useState({});
+
   const currencyNames = {
     USD: "United States Dollar",
     EUR: "Euro",
@@ -19,44 +22,48 @@ export const Currency = () => {
     AED: "United Arab Emirates Dirham",
   };
   const currencyCodes = Object.keys(currencyNames);
-  const handleSubmit = async () => {
+
+  // Fetch exchange rates once on component mount
+  useEffect(() => {
+    const fetchRates = async () => {
+      try {
+        const res = await fetch("https://open.er-api.com/v6/latest/USD");
+        const data = await res.json();
+        if (data && data.rates) {
+          setRates(data.rates);
+        } else {
+          throw new Error("Failed to fetch exchange rates");
+        }
+      } catch (err) {
+        setError("Error fetching currency rates.");
+      }
+    };
+    fetchRates();
+  }, []);
+
+  const handleSubmit = () => {
+    setError(null);
     if (!amount || isNaN(amount)) {
       setError("Please enter a valid amount");
       return;
     }
-
-    setError(null);
-    setLoading(true);
-
-    try {
-      const res = await fetch("http://localhost:5000/convert", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ from, to, amount: parseFloat(amount) }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Server error");
-      }
-
-      if (data.convertedAmount !== undefined) {
-        setConverted(data.convertedAmount.toFixed(2));
-      } else {
-        setError("Conversion failed. Try again.");
-      }
-    } catch (err) {
-      setError(err.message || "Something went wrong");
+    if (!rates[from] || !rates[to]) {
+      setError("Currency not supported");
+      return;
     }
 
+    setLoading(true);
+    const amountNum = parseFloat(amount);
+    const amountInUSD = amountNum / rates[from];
+    const result = amountInUSD * rates[to];
+    setConverted(result.toFixed(2));
     setLoading(false);
   };
 
   return (
-    <div className='h-screen flex items-center justify-center'>
+    <div className='h-screen flex items-center justify-center bg-gray-50'>
       <div className='bg-white p-8 rounded-xl shadow-lg w-full max-w-md'>
-        <h1 className='text-3xl font-semibold mb-6'>Currency Converter</h1>
+        <h1 className='text-3xl font-semibold mb-6 text-center'>Currency Converter</h1>
 
         <div className='flex flex-col gap-4 text-start'>
           <label>From Currency</label>
@@ -107,7 +114,7 @@ export const Currency = () => {
           <button
             className='bg-blue-600 text-white p-3 rounded-xl text-lg mt-4'
             onClick={handleSubmit}
-            disabled={loading}
+            disabled={loading || !Object.keys(rates).length}
           >
             {loading ? "Converting..." : "Convert"}
           </button>
